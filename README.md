@@ -1,1 +1,1 @@
-See: [PDF](./memomemo.pdf).
+[PDF](./memomemo.pdf), [SRC](./memomemo.md).
