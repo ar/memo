@@ -19,7 +19,7 @@ init_git_info() {
         if git rev-parse HEAD > /dev/null 2>&1; then
             BRANCH=$(git rev-parse --abbrev-ref HEAD)
             REVISION=$(git rev-parse --short=7 HEAD)
-            if ! git diff-index --quiet HEAD --; then
+            if [ -n "$(git status --porcelain)" ]; then
                 REVISION="${REVISION}*"
             fi
         else
@@ -55,7 +55,7 @@ T=$(echo "$TS" | cut -d ' ' -f 2)
 init_git_info
 
 # Initialize m4 parameters
-M4_PARAMS="-D__DATE__=$D -D__TIME__=$T -D__BRANCH__=\"$BRANCH\" -D__REVISION__=\"$REVISION\""
+M4_PARAMS="-D__DATE__=$D -D__TIME__=$T -D__BRANCH__=\"$BRANCH\" -D__REVISION__=$REVISION"
 PANDOC_TEMPLATES_DIR="$HOME/.local/share/pandoc/templates"
 
 # Parse -D parameters and Markdown file

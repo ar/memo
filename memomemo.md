@@ -9,7 +9,7 @@ titlepage: true
 lang: "en"
 toc: true
 toc-own-page: true
-footer-center: jPOS.org
+footer-center: jPOS.org (__REVISION__)
 titlepage-rule-color: "360049"
 titlepage-text-color: "FFFFFF"
 titlepage-rule-color: "360049"
@@ -158,13 +158,11 @@ You can add `.bib` file, with the same name as your main `.md` file with the fol
 ...
 ...
 ```
-
-
-
-
-
 changequote(«, »)
 
+## Revision History
+
+esyscmd(git log --pretty=format:'- %ad (`%h`) %s' --date=short __FILENAME__)
 
 [^1]: Disregard the bibliographic references and bookmarks like this; I'm adding them just to show how they look.
 [^2]:  https://github.com/Wandmalfarbe/pandoc-latex-template
