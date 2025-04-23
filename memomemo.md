@@ -1,29 +1,5 @@
 ---
-title: A Memo About Memos
-subject: Memo Typesetting
-author: Alejandro Revilla (\@apr)
-date: 2024-07-24
-keywords: [Typography]
-titlepage: true
-# titlepage-logo: jpos.jpg
-lang: "en"
-toc: true
-toc-own-page: true
-footer-center: jPOS.org (__REVISION__)
-titlepage-rule-color: "360049"
-titlepage-text-color: "FFFFFF"
-titlepage-rule-color: "360049"
-titlepage-rule-height: 0
-titlepage-background: "backgrounds/background.pdf"
-footnotes-pretty: true
-header-includes:
-  - \usepackage{multicol}
-  - \usepackage{mdframed}
-  - \usepackage{graphicx}
-  - \usepackage{xcolor}
-  - \usepackage{pgfplots}
-  - \usepackage{amsmath}
-  - \pgfplotsset{compat=1.17}
+include(.frontmatter)
 ---
 
 # A Memo About Memos
@@ -81,13 +57,22 @@ In that `pandoc/templates` directory, you may also want to add `ieee-with-url.cs
 
 ## The memo script
 
+The memo script can be located at https://github.com/ar/memo/blob/main/bin/memo and has the following options:
 
-
-changequote(`[[', `]]')
-
+```{=latex}
+{
+\begin{center}
+\begin{minipage}{0.85\linewidth}
+\scriptsize
+\begin{verbatim}
+esyscmd(bin/memo)
+\end{verbatim}
+\end{minipage}
+\end{center}
+}
 ```
-include(bin/memo)
-```
+
+If called without options, it converts the Markdown document directly to PDF. For documents that include glossary or nomenclature entries—both of which require multiple LaTeX passes—the `--tex` switch can be used to generate an intermediate `.tex` file. This can then be processed manually, optionally using the `--glossary` and `--nomenclature` switches if those features are needed.
 
 ## Frontmatter
 
@@ -95,33 +80,13 @@ This is a sample frontmatter for this document:
 
 ```
 ---
-title: A Memo About Memos
-subject: Memo Typesetting
-author: Alejandro Revilla (\@apr)
-date: 2024-07-24
-keywords: [Typography]
-titlepage: true
-# titlepage-logo: jpos.jpg
-lang: "en"
-toc: true
-toc-own-page: true
-footer-center: jPOS.org
-titlepage-rule-color: "360049"
-titlepage-text-color: "FFFFFF"
-titlepage-rule-color: "360049"
-titlepage-rule-height: 0
-titlepage-background: "../backgrounds/background.pdf"
-footnotes-pretty: true
-header-includes:
-  - \usepackage{multicol}
-  - \usepackage{mdframed}
-  - \usepackage{graphicx}
-  - \usepackage{xcolor}
-  - \usepackage{pgfplots}
-  - \usepackage{amsmath}
-  - \pgfplotsset{compat=1.17}
+include(.frontmatter)
 ---
 ```
+
+\begin{mdframed}
+Please note that the front matter has been included in the document. Refer to memomemo.md for details.
+\end{mdframed}
 
 Note that some of the added packages are used in my custom template, just as a PoC of different features. You can safely remove that `header-includes` section.
 
@@ -155,14 +120,12 @@ You can add `.bib` file, with the same name as your main `.md` file with the fol
   note = {Available online at \url{https://docs.oasis-open.org/dita/dita/v1.3/os/}},
   url = {https://docs.oasis-open.org/dita/dita/v1.3/os/}
 }
-...
-...
+
 ```
-changequote(«, »)
 
 ## Revision History
 
-esyscmd(git log --pretty=format:'- %ad (`%h`) %s' --date=short __FILENAME__)
+include(.gitlog)
 
 [^1]: Disregard the bibliographic references and bookmarks like this; I'm adding them just to show how they look.
 [^2]:  https://github.com/Wandmalfarbe/pandoc-latex-template

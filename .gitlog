@@ -1,0 +1,44 @@
+```{=latex}
+\footnotesize % Smaller font size than \small
+\renewcommand{\arraystretch}{0.95}  % Adjust row height for readability
+\rowcolors{2}{gray!15}{white}
+
+\begin{longtable}{|p{2.5cm}|p{7.5cm}|p{3cm}|p{2cm}|}
+    \hline
+    \rowcolor{gray!40}
+    \textbf{Date} & \textbf{Message} & \textbf{Author} & \textbf{Hash} \\
+    \hline
+    \endfirsthead
+
+    \hline
+    \rowcolor{gray!40}
+    \textbf{Date} & \textbf{Message} & \textbf{Author} & \textbf{Hash} \\
+    \hline
+    \endhead
+
+    \hline
+    \endfoot
+
+    esyscmd(«git log --date=short --pretty=format:"%ad|%s|%an|%h" | awk -F '|' '{
+      # Escape advanced characters using LaTeX commands
+      gsub(/\\/, "\\textbackslash ", $2);  # \ → \textbackslash
+      gsub(/</, "\\textless ", $2);       # < → \textless
+      gsub(/>/, "\\textgreater ", $2);    # > → \textgreater
+      gsub(/\|/, "\\textbar ", $2);      # | → \textbar
+      gsub(/~/, "\\textasciitilde ", $2); # ~ → \textasciitilde
+      gsub(/\^/, "\\textasciicircum ", $2); # ^ → \textasciicircum
+
+      gsub(/&/, "\\\\&", $2);
+      gsub(/_/, "\\_", $2);
+      gsub(/#/, "\\#", $2);
+      gsub(/\$/, "\\$", $2); 
+      gsub(/%/, "\\%", $2);  
+      gsub(/{/, "\\{", $2); 
+      gsub(/}/, "\\}", $2);
+
+      split($3, n, " ");
+      printf "\\hline %s & %s & %s.%s & %s \\\\\n", $1, $2, substr(n[1],1,1), n[length(n)], $4}'»)dnl
+    \hline
+\end{longtable}
+```
+

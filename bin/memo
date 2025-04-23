@@ -1,134 +1,253 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Markdown → PDF helper
+#
+#   * Default: Pandoc → PDF.
+#   * If glossaries / nomenclature requested **or** --tex given:
+#       Pandoc → TeX → XeLaTeX (3‑pass) with optional glossaries / nomenclature.
+#
+# Requirements:
+#   - npm i -g mermaid-filter
+#   - TeX Live with xelatex, makeglossaries, makeindex
+# -----------------------------------------------------------------------------
+set -euo pipefail
 
-# Requires npm i -g mermaid-filter and TeXLive
+###############################################################################
+# 1 – Defaults & utilities
+###############################################################################
+INFO=0          # verbose mode enabled with --info
+FORCE_TEX=0     # force TeX intermediate with --tex
+GLOSSARY=0      # enabled with --glossary
+NOMENCL=0       # enabled with --nomenclature
+OPEN_PDF=0      # enabled with --open   (macOS convenience)
+KEEP=0          # leave intermediates with --keep
+CLEAN_ONLY=0    # purge intermediates then exit with --clean
+LOG_FILE=""
+PREPROCESSED_MD=""
 
-set -e
-
-# print usage
 usage() {
-    echo "Usage: $(basename $0) [-DNAME=VALUE ...] your-markdown-file.md [single|double]"
-    exit 1
+  cat <<EOF
+Usage: $(basename "$0") [options] file.md [single|double]
+
+Options:
+  --info          Verbose logging to <file>_processing.log instead of /dev/null.
+  --tex           Force TeX intermediate even if no glossary/nomenclature.
+
+  --glossary      Build LaTeX glossaries (makeglossaries + two extra XeLaTeX runs).
+  --nomenclature  Build LaTeX nomenclature (makeindex  + two extra XeLaTeX runs).
+
+  --open          Automatically open the generated PDF (macOS only).
+
+  --keep          Keep all temporary / intermediate files (no cleanup at exit).
+  --clean         Delete temporary / intermediate files and exit without building.
+
+  -DNAME=VALUE    m4 define passed through to preprocessing (repeatable).
+EOF
+  exit 1
 }
 
-# initialize Git branch and revision
 init_git_info() {
-    BRANCH="unknown"
-    REVISION="unknown"
-
-    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-        if git rev-parse HEAD > /dev/null 2>&1; then
-            BRANCH=$(git rev-parse --abbrev-ref HEAD)
-            REVISION=$(git rev-parse --short=7 HEAD)
-            if [ -n "$(git status --porcelain)" ]; then
-                REVISION="${REVISION}*"
-            fi
-        else
-            BRANCH="empty"
-            REVISION="empty"
-        fi
-    fi
-}
-
-# parse layout option
-parse_layout_option() {
-    if [ "$1" = "single" ]; then
-        LAYOUT_OPTION=""
-    elif [ "$1" = "double" ]; then
-        LAYOUT_OPTION="--variable classoption=twocolumn"
+  BRANCH=unknown REVISION=unknown TAG=unknown
+  if git rev-parse --is-inside-work-tree &>/dev/null; then
+    if git rev-parse HEAD &>/dev/null; then
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      REVISION=$(git rev-parse --short=7 HEAD)
+      [[ -n $(git status --porcelain) ]] && REVISION+="*"
+      TAG=$(git describe --tags --long 2>/dev/null || git rev-parse --short HEAD)
     else
-        echo "Invalid layout option. Use 'single' or 'double'."
-        exit 1
+      BRANCH=empty REVISION=empty TAG=
     fi
+  fi
 }
 
-# Check for minimum number of arguments
-if [ $# -lt 1 ]; then
-    usage
-fi
+parse_layout() {
+  case ${1:-single} in
+    single) LAYOUT_OPT="";;
+    double) LAYOUT_OPT="--variable classoption=twocolumn";;
+    *) echo "Layout must be 'single' or 'double'." ; exit 1;;
+  esac
+}
 
-# Initialize variables for m4 -D parameters
-TS=$(date "+%Y-%m-%d %H:%M" | awk '{ printf "%s", $0 }')
-D=$(echo "$TS" | cut -d ' ' -f 1)
-T=$(echo "$TS" | cut -d ' ' -f 2)
+# Generic helper: run command quietly or tee to log depending on $INFO
+quiet_or_log() {   # quiet_or_log cmd arg …
+  if (( INFO )); then "$@" 2>&1 | tee -a "$LOG_FILE"; else "$@" >/dev/null 2>&1; fi
+}
 
-# Initialize Git branch and revision
-init_git_info
+# TeX compilation wrapper that leverages quiet_or_log
+run_xelatex() {    # run_xelatex file.tex
+  local tex=$1
+  quiet_or_log xelatex -interaction=nonstopmode "$tex"
+  [[ -f ${tex%.tex}.pdf ]] || { echo "XeLaTeX failed." ; exit 1; }
+}
 
-# Initialize m4 parameters
-M4_PARAMS="-D__DATE__=$D -D__TIME__=$T -D__BRANCH__=\"$BRANCH\" -D__REVISION__=$REVISION"
-PANDOC_TEMPLATES_DIR="$HOME/.local/share/pandoc/templates"
+cleanup() {
+  if (( KEEP )); then
+    (( INFO )) && echo "Keeping intermediates (--keep), skipping cleanup." \
+              | tee -a "$LOG_FILE"
+    return
+  fi
 
-# Parse -D parameters and Markdown file
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -D*)
-            M4_PARAMS="$M4_PARAMS $1"
-            shift
-            ;;
-        *.md)
-            MD=$1
-            shift
-            break
-            ;;
-        *)
-            usage
-            ;;
-    esac
+  (( INFO )) && echo "Cleaning up…" | tee -a "$LOG_FILE"
+  [[ -f $PREPROCESSED_MD ]] && rm -f "$PREPROCESSED_MD"
+
+  # LaTeX intermediate files
+  if (( GLOSSARY || NOMENCL || FORCE_TEX )); then
+    rm -f "${BASENAME}.tex" "${BASENAME}.aux" "${BASENAME}.log" \
+          "${BASENAME}.out" "${BASENAME}.glo" "${BASENAME}.gls" \
+          "${BASENAME}.glg" "${BASENAME}.ist" "${BASENAME}.xdy" \
+          "${BASENAME}.ilg" "${BASENAME}.ild" "${BASENAME}.nlo" \
+          "${BASENAME}.ind" "${BASENAME}.nls" "${BASENAME}.glsdefs" \
+          "${BASENAME}.toc"
+  fi
+  rm -fr mermaid-img
+}
+
+# trap cleanup EXIT
+
+error_handler() {
+  local line=$1
+  if (( INFO )); then
+    echo "Error at line $line" | tee -a "$LOG_FILE"
+    tail -n10 "$LOG_FILE"
+  else
+    echo "Error at line $line" >&2
+  fi
+  exit 1
+}
+trap 'error_handler $LINENO' ERR
+
+###############################################################################
+# 2 – Argument parsing
+###############################################################################
+(( $# < 1 )) && usage
+
+M4_PARAMS=()
+while [[ ${1:-} =~ ^(-D[^[:space:]]*|--info|--tex|--glossary|--nomenclature|--open|--keep|--clean) ]]; do
+  case $1 in
+    -D*)            M4_PARAMS+=("$1") ;;
+    --info)         INFO=1 ;;
+    --tex)          FORCE_TEX=1 ;;
+    --glossary)     GLOSSARY=1 ;;
+    --nomenclature) NOMENCL=1 ;;
+    --open)         OPEN_PDF=1 ;;
+    --keep)         KEEP=1 ;;
+    --clean)        CLEAN_ONLY=1 ;;
+  esac
+  shift
 done
 
-# Check if a Markdown file was provided
-if [ -z "$MD" ]; then
-    usage
-fi
+MD=${1:-}; [[ -z $MD ]] && usage ; shift || true
+layout=${1:-single}
+parse_layout "$layout"
 
-# Parse layout option
-LAYOUT=${1:-single}
-parse_layout_option "$LAYOUT"
+###############################################################################
+# 3 – Metadata & paths
+###############################################################################
+TS=$(date "+%Y-%m-%d %H:%M") ; D=${TS% *} ; T=${TS#* }
+init_git_info
 
-DIR=$(dirname "$MD")
-BASENAME=$(basename "$MD" .md)
-PDF="$DIR/${BASENAME}.pdf"
-BIB="$DIR/${BASENAME}.bib"
+ABS_MD=$(realpath "$MD")
+DIR=$(dirname "$ABS_MD")
+BASENAME=$(basename "$ABS_MD" .md)
+cd "$DIR" || { echo "Cannot cd into $DIR" ; exit 1; }
+
+PDF="${BASENAME}.pdf"
+BIB="${BASENAME}.bib"
 PREPROCESSED_MD="${BASENAME}_preprocessed.md"
-ERROR_FILE="mermaid-filter.err"
-M4_PARAMS="$M4_PARAMS -D__FILENAME__=$MD"
+LOG_FILE="${BASENAME}_processing.log"
+(( INFO )) && : >"$LOG_FILE"
 
-# Preprocess the Markdown file with m4
+M4_PARAMS+=(
+  "-D__DATE__=$D" "-D__TIME__=$T" "-D__BRANCH__=$BRANCH"
+  "-D__REVISION__=$REVISION" "-D__TAG__=$TAG" "-D__FILENAME__=$ABS_MD"
+)
+
+PANDOC_TPL_DIR="$HOME/.local/share/pandoc/templates"
+
+###############################################################################
+# 4 – --clean (purge only) and early exit
+###############################################################################
+if (( CLEAN_ONLY )); then
+  KEEP=0          # ensure files are actually removed
+  cleanup
+  echo "Temporary files removed."
+  exit 0
+fi
+
+###############################################################################
+# 5 – m4 pre‑processing
+###############################################################################
 {
-    echo "changequote(«, »)"
-    echo "changecom(«@@»)"
-    cat "$MD"
-} | m4 $M4_PARAMS - > "$PREPROCESSED_MD"
+  echo 'changequote(«, »)'
+  echo 'changecom(«@@»)'
+  cat "$ABS_MD"
+} | m4 "${M4_PARAMS[@]}" - > "$PREPROCESSED_MD"
+(( INFO )) && echo "Preprocessed → $PREPROCESSED_MD" | tee -a "$LOG_FILE"
 
-# Use -t latex -o $MD.tex to get LaTeX output instead of PDF
-if [ -f "$BIB" ]; then
-    if [ -z "$BIB_OPTION" ]; then
-        BIB_OPTION="--bibliography=$BIB"
-    else
-        BIB_OPTION="$BIB_OPTION --bibliography=$BIB"
-    fi
-    BIB_OPTION="$BIB_OPTION --citeproc"
+###############################################################################
+# 6 – Bibliography
+###############################################################################
+BIB_OPT="" ; [[ -f $BIB ]] && BIB_OPT="--bibliography=$BIB --citeproc"
+
+###############################################################################
+# 7 – Glossary / nomenclature (flags now control behaviour)
+###############################################################################
+
+###############################################################################
+# 8 – Pandoc base args
+###############################################################################
+pandoc_common=(
+  --pdf-engine=xelatex
+  --from markdown
+  --variable papersize=a4
+  --template=custom_eisvogel
+  --listings
+  --csl="$PANDOC_TPL_DIR/ieee-with-url.csl"
+  -F mermaid-filter
+  $LAYOUT_OPT
+  $BIB_OPT
+  -s "$PREPROCESSED_MD"
+)
+
+###############################################################################
+# 9 – Build flow
+###############################################################################
+if (( GLOSSARY || NOMENCL || FORCE_TEX )); then
+  # 9a – TeX intermediate path
+  quiet_or_log pandoc "${pandoc_common[@]}" -o "${BASENAME}.tex"
+
+  run_xelatex "${BASENAME}.tex"        # pass 1
+
+  if (( GLOSSARY || NOMENCL )); then
+    (( GLOSSARY )) && quiet_or_log makeglossaries "$BASENAME"
+    (( NOMENCL  )) && quiet_or_log makeindex "${BASENAME}.nlo" \
+                                            -s nomencl.ist -o "${BASENAME}.nls"
+
+    run_xelatex "${BASENAME}.tex"      # pass 2
+    run_xelatex "${BASENAME}.tex"      # pass 3
+  fi
+
+  mv "${BASENAME}.pdf" "$PDF"
+else
+  # 9b – Direct Pandoc → PDF
+  quiet_or_log pandoc "${pandoc_common[@]}" -o "$PDF"
 fi
 
-cd "$DIR" && pandoc --pdf-engine=xelatex \
-    --from markdown \
-    --variable papersize=a4 \
-    --template=custom_eisvogel --listings \
-    --csl=$PANDOC_TEMPLATES_DIR/ieee-with-url.csl \
-    -F mermaid-filter \
-    $LAYOUT_OPTION \
-    $BIB_OPTION \
-    -s "$PREPROCESSED_MD" -o "$PDF"
+###############################################################################
+# 10 – Finish
+###############################################################################
+[[ -f $PDF ]] || { echo "PDF generation failed." ; exit 1; }
 
-# Clean up the preprocessed file
-if [ -f "$PREPROCESSED_MD" ]; then
-    rm "$PREPROCESSED_MD"
+if (( INFO )); then
+  {
+    echo "========================================"
+    echo "PDF saved → $PDF"
+    echo "Completed at $(date)"
+    echo "========================================"
+  } | tee -a "$LOG_FILE"
 fi
 
-# Clean up mermaid's error file if it's empty
-if [ -f "$ERROR_FILE" ] && [ ! -s "$ERROR_FILE" ]; then
-    rm "$ERROR_FILE"
+# macOS convenience -----------------------------------------------------------
+if [[ $(uname) == Darwin ]]; then
+  (( OPEN_PDF  )) && open "$PDF" || :
 fi
 
-echo "PDF generated at $PDF"
-open "$PDF"

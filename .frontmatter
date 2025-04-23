@@ -1,0 +1,27 @@
+title: A Memo About Memos
+subject: Memo Typesetting
+author: Alejandro Revilla (\@apr)
+date: 2024-07-24
+keywords: [Typography]
+titlepage: true
+# titlepage-logo: jpos.jpg
+lang: "en"
+toc: true
+toc-own-page: true
+footer-center: jPOS.org (__REVISION__)
+titlepage-rule-color: "360049"
+titlepage-text-color: "FFFFFF"
+titlepage-rule-color: "360049"
+titlepage-rule-height: 0
+titlepage-background: "backgrounds/background.pdf"
+footnotes-pretty: true
+header-includes:
+  - \usepackage{multicol}
+  - \usepackage{mdframed}
+  - \usepackage{graphicx}
+  - \usepackage{xcolor}
+  - \usepackage{pgfplots}
+  - \usepackage{amsmath}
+  - \pgfplotsset{compat=1.17}
+  - \usepackage{longtable}
+
