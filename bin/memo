@@ -213,7 +213,7 @@ pandoc_common=(
 ###############################################################################
 if (( GLOSSARY || NOMENCL || FORCE_TEX )); then
   # 9a – TeX intermediate path
-  quiet_or_log pandoc "${pandoc_common[@]}" -o "${BASENAME}.tex"
+  quiet_or_log pandoc "${pandoc_common[@]}" --extract-media=mermaid-img -o "${BASENAME}.tex"
 
   run_xelatex "${BASENAME}.tex"        # pass 1
 
