@@ -19,6 +19,7 @@ FORCE_TEX=0     # force TeX intermediate with --tex
 GLOSSARY=0      # enabled with --glossary
 NOMENCL=0       # enabled with --nomenclature
 OPEN_PDF=0      # enabled with --open   (macOS convenience)
+YOINK_PDF=0     # enabled with --yoink  (macOS convenience)
 KEEP=0          # leave intermediates with --keep
 CLEAN_ONLY=0    # purge intermediates then exit with --clean
 LOG_FILE=""
@@ -36,6 +37,7 @@ Options:
   --nomenclature  Build LaTeX nomenclature (makeindex  + two extra XeLaTeX runs).
 
   --open          Automatically open the generated PDF (macOS only).
+  --yoink         Send the generated PDF to Yoink (macOS only).
 
   --keep          Keep all temporary / intermediate files (no cleanup at exit).
   --clean         Delete temporary / intermediate files and exit without building.
@@ -72,11 +74,17 @@ quiet_or_log() {   # quiet_or_log cmd arg …
   if (( INFO )); then "$@" 2>&1 | tee -a "$LOG_FILE"; else "$@" >/dev/null 2>&1; fi
 }
 
-# TeX compilation wrapper that leverages quiet_or_log
+# TeX compilation wrapper that ignores xelatex exit code but checks PDF output
 run_xelatex() {    # run_xelatex file.tex
   local tex=$1
-  quiet_or_log xelatex -interaction=nonstopmode "$tex"
-  [[ -f ${tex%.tex}.pdf ]] || { echo "XeLaTeX failed." ; exit 1; }
+  # Run xelatex and ignore its exit status (but capture output)
+  if (( INFO )); then
+    xelatex -interaction=nonstopmode "$tex" 2>&1 | tee -a "$LOG_FILE" || true
+  else
+    xelatex -interaction=nonstopmode "$tex" >/dev/null 2>&1 || true
+  fi
+  # Verify PDF was actually created
+  [[ -f ${tex%.tex}.pdf ]] || { echo "XeLaTeX failed to produce PDF." ; exit 1; }
 }
 
 cleanup() {
@@ -98,10 +106,10 @@ cleanup() {
           "${BASENAME}.ind" "${BASENAME}.nls" "${BASENAME}.glsdefs" \
           "${BASENAME}.toc"
   fi
-  rm -fr mermaid-img
+  rm -fr mermaid-img mermaid-filter.err
 }
 
-# trap cleanup EXIT
+trap cleanup EXIT
 
 error_handler() {
   local line=$1
@@ -121,7 +129,7 @@ trap 'error_handler $LINENO' ERR
 (( $# < 1 )) && usage
 
 M4_PARAMS=()
-while [[ ${1:-} =~ ^(-D[^[:space:]]*|--info|--tex|--glossary|--nomenclature|--open|--keep|--clean) ]]; do
+while [[ ${1:-} =~ ^(-D[^[:space:]]*|--info|--tex|--glossary|--nomenclature|--open|--yoink|--keep|--clean) ]]; do
   case $1 in
     -D*)            M4_PARAMS+=("$1") ;;
     --info)         INFO=1 ;;
@@ -129,6 +137,7 @@ while [[ ${1:-} =~ ^(-D[^[:space:]]*|--info|--tex|--glossary|--nomenclature|--op
     --glossary)     GLOSSARY=1 ;;
     --nomenclature) NOMENCL=1 ;;
     --open)         OPEN_PDF=1 ;;
+    --yoink)        YOINK_PDF=1 ;;
     --keep)         KEEP=1 ;;
     --clean)        CLEAN_ONLY=1 ;;
   esac
@@ -200,6 +209,7 @@ pandoc_common=(
   --from markdown
   --variable papersize=a4
   --template=custom_eisvogel
+  --top-level-division=section
   --listings
   --csl="$PANDOC_TPL_DIR/ieee-with-url.csl"
   -F mermaid-filter
@@ -218,7 +228,7 @@ if (( GLOSSARY || NOMENCL || FORCE_TEX )); then
   run_xelatex "${BASENAME}.tex"        # pass 1
 
   if (( GLOSSARY || NOMENCL )); then
-    (( GLOSSARY )) && quiet_or_log makeglossaries "$BASENAME"
+    (( GLOSSARY )) && quiet_or_log makeglossaries -d . "$BASENAME"
     (( NOMENCL  )) && quiet_or_log makeindex "${BASENAME}.nlo" \
                                             -s nomencl.ist -o "${BASENAME}.nls"
 
@@ -249,5 +259,6 @@ fi
 # macOS convenience -----------------------------------------------------------
 if [[ $(uname) == Darwin ]]; then
   (( OPEN_PDF  )) && open "$PDF" || :
+  (( YOINK_PDF )) && open -a yoink "$PDF" || :
 fi
 
