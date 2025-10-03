@@ -183,6 +183,15 @@ if (( CLEAN_ONLY )); then
 fi
 
 ###############################################################################
+# 4a – Pandoc filters (auto-detect optional filters)
+###############################################################################
+# Always keep mermaid; add pandoc-latex-environment if available (no breakage).
+PANDOC_FILTERS=(-F mermaid-filter)
+if command -v pandoc-latex-environment >/dev/null 2>&1; then
+  PANDOC_FILTERS+=(-F pandoc-latex-environment)
+fi
+
+###############################################################################
 # 5 – m4 pre‑processing
 ###############################################################################
 {
@@ -201,6 +210,7 @@ BIB_OPT="" ; [[ -f $BIB ]] && BIB_OPT="--bibliography=$BIB --citeproc"
 # 7 – Glossary / nomenclature (flags now control behaviour)
 ###############################################################################
 
+
 ###############################################################################
 # 8 – Pandoc base args
 ###############################################################################
@@ -212,7 +222,7 @@ pandoc_common=(
   --top-level-division=section
   --listings
   --csl="$PANDOC_TPL_DIR/ieee-with-url.csl"
-  -F mermaid-filter
+  "${PANDOC_FILTERS[@]}"
   $LAYOUT_OPT
   $BIB_OPT
   -s "$PREPROCESSED_MD"
