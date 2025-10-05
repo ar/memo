@@ -55,6 +55,23 @@ The Eisvogel template, located at https://github.com/Wandmalfarbe/pandoc-latex-t
 
 In that `pandoc/templates` directory, you may also want to add `ieee-with-url.csl` from https://github.com/citation-style-language/styles/blob/master/ieee-with-url.csl or another citation style of your choice.
 
+### Pandoc LaTeX Environment
+
+::: tip
+
+This is optional, but can be used to print tips like this.
+:::
+
+If Pandoc LaTeX environment is available, and you include `awesomebox` in your `frontmatter` like we do in the sample one provided here, you can use `::: tip` blocks as well as `::: note`, warning caution and important` admonitions.
+
+Installation is easy, just:
+
+```
+ pip install pandoc-latex-environment
+```
+
+\newpage
+
 ## The memo script
 
 The memo script can be located at https://github.com/ar/memo/blob/main/bin/memo and has the following options:

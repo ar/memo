@@ -24,4 +24,15 @@ header-includes:
   - \usepackage{amsmath}
   - \pgfplotsset{compat=1.17}
   - \usepackage{longtable}
+  - \usepackage{fontawesome5}
+  - \newcommand{\user}{\faIcon{user}}
+  - \usepackage{awesomebox}
+
+pandoc-latex-environment:
+  noteblock: [note]
+  tipblock: [tip]
+  warningblock: [warning]
+  cautionblock: [caution]
+  importantblock: [important]
+
 
