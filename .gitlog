@@ -1,7 +1,11 @@
 ```{=latex}
-\footnotesize % Smaller font size than \small
-\renewcommand{\arraystretch}{0.95}  % Adjust row height for readability
+\footnotesize
+\renewcommand{\arraystretch}{0.95}
 \rowcolors{2}{gray!15}{white}
+
+ifdef(«GITLOG_FILENAME»,
+  «define(«GITLOG_CMD», «git log --date=short --pretty=format:"%ad|%s|%an|%h" -- "»GITLOG_FILENAME«"»)»,
+  «define(«GITLOG_CMD», «git log --date=short --pretty=format:"%ad|%s|%an|%h"»)»)dnl
 
 \begin{longtable}{|p{2.5cm}|p{7.5cm}|p{3cm}|p{2cm}|}
     \hline
@@ -19,7 +23,7 @@
     \hline
     \endfoot
 
-    esyscmd(«git log --date=short --pretty=format:"%ad|%s|%an|%h" | awk -F '|' '{
+    esyscmd(«»GITLOG_CMD« | awk -F '|' '{
       # Escape advanced characters using LaTeX commands
       gsub(/\\/, "\\textbackslash ", $2);  # \ → \textbackslash
       gsub(/</, "\\textless ", $2);       # < → \textless
@@ -36,9 +40,14 @@
       gsub(/{/, "\\{", $2); 
       gsub(/}/, "\\}", $2);
 
+
       split($3, n, " ");
       printf "\\hline %s & %s & %s.%s & %s \\\\\n", $1, $2, substr(n[1],1,1), n[length(n)], $4}'»)dnl
+
+      undefine(«GITLOG_CMD»)dnl
+      undefine(«GITLOG_FILENAME»)dnl
     \hline
 \end{longtable}
+\newpage
 ```
 
