@@ -2,6 +2,16 @@
 \footnotesize
 \renewcommand{\arraystretch}{0.95}
 \rowcolors{2}{gray!15}{white}
+\makeatletter
+\if@twocolumn
+  \gdef\memogitlogstartcolumns{\onecolumn}
+  \gdef\memogitlogrestorecolumns{\twocolumn}
+\else
+  \gdef\memogitlogstartcolumns{}
+  \gdef\memogitlogrestorecolumns{}
+\fi
+\makeatother
+\memogitlogstartcolumns
 
 ifdef(«GITLOG_FILENAME»,
   «define(«GITLOG_CMD», «git log --date=short --pretty=format:"%ad|%s|%an|%h" -- "»GITLOG_FILENAME«"»)»,
@@ -48,6 +58,6 @@ ifdef(«GITLOG_FILENAME»,
       undefine(«GITLOG_FILENAME»)dnl
     \hline
 \end{longtable}
+\memogitlogrestorecolumns
 \newpage
 ```
-
