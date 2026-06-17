@@ -41,6 +41,7 @@ Options:
 
   --keep          Keep all temporary / intermediate files (no cleanup at exit).
   --clean         Delete temporary / intermediate files and exit without building.
+  --template PATH Path to the root pandoc template name (it defaults to 'custom_eisvogel' from the default pandoc templates data dir).
 
   -DNAME=VALUE    m4 define passed through to preprocessing (repeatable).
 EOF
@@ -129,19 +130,26 @@ trap 'error_handler $LINENO' ERR
 (( $# < 1 )) && usage
 
 M4_PARAMS=()
-while [[ ${1:-} =~ ^(-D[^[:space:]]*|--info|--tex|--glossary|--nomenclature|--open|--yoink|--keep|--clean) ]]; do
+while (( $# > 0 )); do
   case $1 in
-    -D*)            M4_PARAMS+=("$1") ;;
-    --info)         INFO=1 ;;
-    --tex)          FORCE_TEX=1 ;;
-    --glossary)     GLOSSARY=1 ;;
-    --nomenclature) NOMENCL=1 ;;
-    --open)         OPEN_PDF=1 ;;
-    --yoink)        YOINK_PDF=1 ;;
-    --keep)         KEEP=1 ;;
-    --clean)        CLEAN_ONLY=1 ;;
+    -D*)            M4_PARAMS+=("$1") ; shift ;;
+    --info)         INFO=1            ; shift ;;
+    --tex)          FORCE_TEX=1       ; shift ;;
+    --glossary)     GLOSSARY=1        ; shift ;;
+    --nomenclature) NOMENCL=1         ; shift ;;
+    --open)         OPEN_PDF=1        ; shift ;;
+    --yoink)        YOINK_PDF=1       ; shift ;;
+    --keep)         KEEP=1            ; shift ;;
+    --clean)        CLEAN_ONLY=1      ; shift ;;
+    --template)
+      [[ $# -ge 2 ]] || { echo "--template requires a value." ; exit 1; }
+      TEMPLATE_NAME="$2"
+      shift 2
+      ;;
+    --) shift; break ;;
+    -*) usage ;;
+    *)  break ;;
   esac
-  shift
 done
 
 MD=${1:-}; [[ -z $MD ]] && usage ; shift || true
@@ -175,7 +183,6 @@ M4_PARAMS+=(
   "-D__REVISION__=$REVISION" "-D__TAG__=$TAG" "-D__FILENAME__=$ABS_MD"
 )
 
-PANDOC_TPL_DIR="$HOME/.local/share/pandoc/templates"
 
 ###############################################################################
 # 4 – --clean (purge only) and early exit
@@ -219,13 +226,19 @@ BIB_OPT="" ; [[ -f $BIB ]] && BIB_OPT="--bibliography=$BIB --citeproc"
 ###############################################################################
 # 8 – Pandoc base args
 ###############################################################################
+
+DEFAULT_DATA_DIR=$(pandoc --version  | sed -E -n 's/^User data directory:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p')
+PANDOC_DATA_DIR="${PANDOC_DATA_DIR:-$DEFAULT_DATA_DIR}"
+PANDOC_TPL_DIR="$PANDOC_DATA_DIR/templates"
+TEMPLATE_NAME="${TEMPLATE_NAME:-custom_eisvogel}"
+
 pandoc_common=(
+  --data-dir="$PANDOC_DATA_DIR"
   --pdf-engine=xelatex
   --from markdown
   --variable papersize=a4
-  --template=custom_eisvogel
-  --top-level-division=section
-  --listings
+  --template="$TEMPLATE_NAME"
+  --syntax-highlighting=idiomatic
   --csl="$PANDOC_TPL_DIR/ieee-with-url.csl"
   "${PANDOC_FILTERS[@]}"
   $LAYOUT_OPT
@@ -276,4 +289,3 @@ if [[ $(uname) == Darwin ]]; then
   (( OPEN_PDF  )) && open "$PDF" || :
   (( YOINK_PDF )) && open -a yoink "$PDF" || :
 fi
-
