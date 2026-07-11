@@ -18,7 +18,7 @@ INFO=0          # verbose mode enabled with --info
 FORCE_TEX=0     # force TeX intermediate with --tex
 GLOSSARY=0      # enabled with --glossary
 NOMENCL=0       # enabled with --nomenclature
-OPEN_PDF=0      # enabled with --open   (macOS convenience)
+OPEN_PDF=0      # enabled with --open
 YOINK_PDF=0     # enabled with --yoink  (macOS convenience)
 KEEP=0          # leave intermediates with --keep
 CLEAN_ONLY=0    # purge intermediates then exit with --clean
@@ -36,7 +36,7 @@ Options:
   --glossary      Build LaTeX glossaries (makeglossaries + two extra XeLaTeX runs).
   --nomenclature  Build LaTeX nomenclature (makeindex  + two extra XeLaTeX runs).
 
-  --open          Automatically open the generated PDF (macOS only).
+  --open          Automatically open the generated PDF (macOS, or Linux with xdg-open/open).
   --yoink         Send the generated PDF to Yoink (macOS only).
 
   --keep          Keep all temporary / intermediate files (no cleanup at exit).
@@ -284,8 +284,22 @@ if (( INFO )); then
   } | tee -a "$LOG_FILE"
 fi
 
+open_pdf() {
+  local file="$1"
+  if [[ $(uname) == Darwin ]]; then
+    open "$file"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$file"
+  elif command -v open >/dev/null 2>&1; then
+    open "$file"
+  elif (( INFO )); then
+    echo "Cannot open PDF automatically: no 'open' or 'xdg-open' command found." >&2
+  fi
+}
+
+(( OPEN_PDF )) && open_pdf "$PDF"
+
 # macOS convenience -----------------------------------------------------------
 if [[ $(uname) == Darwin ]]; then
-  (( OPEN_PDF  )) && open "$PDF" || :
   (( YOINK_PDF )) && open -a yoink "$PDF" || :
 fi
