@@ -324,7 +324,10 @@ open_pdf() {
   fi
 }
 
-(( OPEN_PDF )) && open_pdf "$PDF"
+# || : — an opener failure (headless box: xdg-open without a DISPLAY exits
+# non-zero) must not fail a run whose PDF already built successfully; the
+# pre-#7 macOS-only line carried the same guard for the same reason.
+(( OPEN_PDF )) && open_pdf "$PDF" || :
 
 # macOS convenience -----------------------------------------------------------
 if [[ $(uname) == Darwin ]]; then
