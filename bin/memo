@@ -95,6 +95,12 @@ cleanup() {
     return
   fi
 
+  # A failure before the file paths are resolved (usage error, missing
+  # input) reaches this EXIT trap with BASENAME unset; there is nothing
+  # to clean, and touching the variables under `set -u` would turn the
+  # real error into "unbound variable" noise.
+  [[ -n ${BASENAME:-} ]] || return 0
+
   (( INFO )) && echo "Cleaning up…" | tee -a "$LOG_FILE"
   [[ -f $PREPROCESSED_MD ]] && rm -f "$PREPROCESSED_MD"
 
@@ -153,6 +159,10 @@ while (( $# > 0 )); do
 done
 
 MD=${1:-}; [[ -z $MD ]] && usage ; shift || true
+if [[ ! -f $MD ]]; then
+  echo "memo: no such file: $MD" >&2
+  exit 2
+fi
 layout=${1:-single}
 parse_layout "$layout"
 
@@ -242,13 +252,22 @@ if [ -d "$PANDOC_DATA_DIR/filters" ]; then
 fi
 TEMPLATE_NAME="${TEMPLATE_NAME:-custom_eisvogel}"
 
+# --syntax-highlighting is only understood by newer pandoc releases; older
+# ones (<= 3.7) reject the whole invocation with "Unknown option". Fall back
+# to --listings there so the script runs against either generation.
+if pandoc --help 2>/dev/null | grep -q -- --syntax-highlighting; then
+  HIGHLIGHT_OPT=(--syntax-highlighting=idiomatic)
+else
+  HIGHLIGHT_OPT=(--listings)
+fi
+
 pandoc_common=(
   --data-dir="$PANDOC_DATA_DIR"
   --pdf-engine=xelatex
   --from markdown
   --variable papersize=a4
   --template="$TEMPLATE_NAME"
-  --syntax-highlighting=idiomatic
+  "${HIGHLIGHT_OPT[@]}"
   --csl="$PANDOC_TPL_DIR/ieee-with-url.csl"
   "${PANDOC_FILTERS[@]}"
   $LAYOUT_OPT
