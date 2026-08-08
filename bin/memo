@@ -292,8 +292,6 @@ if (( GLOSSARY || NOMENCL || FORCE_TEX )); then
     run_xelatex "${BASENAME}.tex"      # pass 2
     run_xelatex "${BASENAME}.tex"      # pass 3
   fi
-
-  mv "${BASENAME}.pdf" "$PDF"
 else
   # 9b – Direct Pandoc → PDF
   quiet_or_log pandoc "${pandoc_common[@]}" -o "$PDF"
