@@ -230,6 +230,16 @@ BIB_OPT="" ; [[ -f $BIB ]] && BIB_OPT="--bibliography=$BIB --citeproc"
 DEFAULT_DATA_DIR=$(pandoc --version  | sed -E -n 's/^User data directory:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p')
 PANDOC_DATA_DIR="${PANDOC_DATA_DIR:-$DEFAULT_DATA_DIR}"
 PANDOC_TPL_DIR="$PANDOC_DATA_DIR/templates"
+
+# Apply every Lua filter installed under the pandoc data dir, in name order
+# (prefix with a number to control sequencing). No directory, no filters —
+# existing installs behave exactly as before. This repo ships
+# filters/table-widths.lua as the first such filter.
+if [ -d "$PANDOC_DATA_DIR/filters" ]; then
+  while IFS= read -r _lua; do
+    PANDOC_FILTERS+=(--lua-filter "$_lua")
+  done < <(find "$PANDOC_DATA_DIR/filters" -maxdepth 1 -name '*.lua' | sort)
+fi
 TEMPLATE_NAME="${TEMPLATE_NAME:-custom_eisvogel}"
 
 pandoc_common=(

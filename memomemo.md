@@ -55,6 +55,26 @@ The Eisvogel template, located at https://github.com/Wandmalfarbe/pandoc-latex-t
 
 In that `pandoc/templates` directory, you may also want to add `ieee-with-url.csl` from https://github.com/citation-style-language/styles/blob/master/ieee-with-url.csl or another citation style of your choice.
 
+### Table-width filter
+
+Pipe-table layout in `pandoc` is famously indirect: a table renders at
+natural width until any of its source lines exceeds `--columns` (72 by
+default), at which point it switches to full text width with relative
+column widths taken from the dash counts in the separator row. In other
+words, trailing spaces and dash runs are load-bearing. The
+`filters/table-widths.lua` filter in this repository removes that
+dependency by assigning every table explicit, content-proportional
+column widths; a table wrapped in a fenced div `::: {.natural-width}`
+keeps pandoc's default rendering. `memo` applies every `*.lua` filter found in
+`$HOME/.local/share/pandoc/filters/`, in name order (prefix filters with
+a number to control sequencing), and behaves exactly as before when the
+directory is absent. To enable this one:
+
+```
+mkdir -p $HOME/.local/share/pandoc/filters
+cp filters/table-widths.lua $HOME/.local/share/pandoc/filters/
+```
+
 ### Pandoc LaTeX Environment
 
 ::: tip
