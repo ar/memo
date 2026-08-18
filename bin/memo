@@ -65,7 +65,9 @@ init_git_info() {
 parse_layout() {
   case ${1:-single} in
     single) LAYOUT_OPT="";;
-    double) LAYOUT_OPT="--variable classoption=twocolumn";;
+    # twocolumn metadata flag activates filters/twocolumn-tables.lua
+    # (longtable cannot render in twocolumn mode)
+    double) LAYOUT_OPT="--variable classoption=twocolumn --metadata=twocolumn:true";;
     *) echo "Layout must be 'single' or 'double'." ; exit 1;;
   esac
 }
@@ -248,7 +250,7 @@ PANDOC_TPL_DIR="$PANDOC_DATA_DIR/templates"
 if [ -d "$PANDOC_DATA_DIR/filters" ]; then
   while IFS= read -r _lua; do
     PANDOC_FILTERS+=(--lua-filter "$_lua")
-  done < <(find "$PANDOC_DATA_DIR/filters" -maxdepth 1 -name '*.lua' | sort)
+  done < <(find -H "$PANDOC_DATA_DIR/filters" -maxdepth 1 -name '*.lua' | sort)
 fi
 TEMPLATE_NAME="${TEMPLATE_NAME:-custom_eisvogel}"
 
