@@ -41,7 +41,7 @@ Options:
 
   --keep          Keep all temporary / intermediate files (no cleanup at exit).
   --clean         Delete temporary / intermediate files and exit without building.
-  --template PATH Path to the root pandoc template name (it defaults to 'custom_eisvogel' from the default pandoc templates data dir).
+  --template PATH Path to the root pandoc template name (defaults to 'custom_eisvogel' for single, 'custom_magazine' for double).
 
   -DNAME=VALUE    m4 define passed through to preprocessing (repeatable).
 EOF
@@ -252,7 +252,15 @@ if [ -d "$PANDOC_DATA_DIR/filters" ]; then
     PANDOC_FILTERS+=(--lua-filter "$_lua")
   done < <(find -H "$PANDOC_DATA_DIR/filters" -maxdepth 1 -name '*.lua' | sort)
 fi
-TEMPLATE_NAME="${TEMPLATE_NAME:-custom_eisvogel}"
+if [[ $layout == double ]]; then
+  TEMPLATE_NAME="${TEMPLATE_NAME:-custom_magazine}"
+else
+  TEMPLATE_NAME="${TEMPLATE_NAME:-custom_eisvogel}"
+fi
+# Editorial transformations are opt-in through the magazine template only.
+if [[ $(basename "$TEMPLATE_NAME" .latex) == custom_magazine ]]; then
+  PANDOC_FILTERS+=(--metadata memo-magazine:true)
+fi
 
 # --syntax-highlighting is only understood by newer pandoc releases; older
 # ones (<= 3.7) reject the whole invocation with "Unknown option". Fall back

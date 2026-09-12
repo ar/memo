@@ -11,19 +11,31 @@
 --- to keep pandoc's default auto-width rendering.
 
 local MIN_WIDTH = 0.06   -- floor so tiny columns (e.g. "Bit") stay readable
+local CHARS_PER_LINE = 80 -- conservative body-width capacity in characters
+local MAX_FLOOR = 0.35   -- one pathological unbreakable cell can't eat the page
 
-local function cell_len(cell)
-  local text = pandoc.utils.stringify(pandoc.Blocks(cell.contents))
+local function len(text)
   -- Count UTF-8 codepoints, not bytes, so accented text doesn't skew widths.
   local ok, n = pcall(function() return pandoc.text.len(text) end)
   return ok and n or #text
 end
 
-local function rows_max(rows, max)
+local function cell_text(cell)
+  return pandoc.utils.stringify(pandoc.Blocks(cell.contents))
+end
+
+local function rows_max(rows, max, word)
   for _, row in ipairs(rows) do
     for i, cell in ipairs(row.cells) do
-      local n = cell_len(cell)
+      local text = cell_text(cell)
+      local n = len(text)
       if n > (max[i] or 0) then max[i] = n end
+      -- Longest unbreakable run: a p-column wraps at spaces and after
+      -- hyphens, but never inside a word or a number like 400,000.
+      for w in text:gmatch('[^%s%-]+') do
+        local wn = len(w)
+        if wn > (word[i] or 0) then word[i] = wn end
+      end
     end
   end
 end
@@ -32,13 +44,13 @@ local function Table(tbl)
   local ncols = #tbl.colspecs
   if ncols == 0 then return nil end
 
-  local max = {}
-  rows_max(tbl.head.rows, max)
+  local max, word = {}, {}
+  rows_max(tbl.head.rows, max, word)
   for _, body in ipairs(tbl.bodies) do
-    rows_max(body.body, max)
-    rows_max(body.head, max)
+    rows_max(body.body, max, word)
+    rows_max(body.head, max, word)
   end
-  rows_max(tbl.foot.rows, max)
+  rows_max(tbl.foot.rows, max, word)
 
   local total = 0
   for i = 1, ncols do
@@ -47,16 +59,35 @@ local function Table(tbl)
   end
   if total == 0 then return nil end
 
-  -- Proportional widths, clamped to the floor, then renormalized to 1.0
-  -- (full text width) so the sum is exact.
+  -- Per-column floor: MIN_WIDTH, or the longest unbreakable word plus
+  -- padding — a column narrower than its longest word overflows the rule.
+  local floor, floor_sum = {}, 0
+  for i = 1, ncols do
+    floor[i] = math.min(
+      math.max(MIN_WIDTH, ((word[i] or 1) + 2) / CHARS_PER_LINE),
+      MAX_FLOOR)
+    floor_sum = floor_sum + floor[i]
+  end
+
+  -- Proportional widths clamped to the floors, then fitted to exactly 1.0
+  -- (full text width): scale only the slack above the floors, so no
+  -- column is ever squeezed back under its longest word.
   local widths, sum = {}, 0
   for i = 1, ncols do
-    widths[i] = math.max(max[i] / total, MIN_WIDTH)
+    widths[i] = math.max(max[i] / total, floor[i])
     sum = sum + widths[i]
+  end
+  if sum > 1 and floor_sum < 1 then
+    local scale = (1 - floor_sum) / (sum - floor_sum)
+    for i = 1, ncols do
+      widths[i] = floor[i] + (widths[i] - floor[i]) * scale
+    end
+  else
+    for i = 1, ncols do widths[i] = widths[i] / sum end
   end
   for i = 1, ncols do
     local align = tbl.colspecs[i][1]
-    tbl.colspecs[i] = { align, widths[i] / sum }
+    tbl.colspecs[i] = { align, widths[i] }
   end
   return tbl
 end
