@@ -111,6 +111,8 @@ esyscmd(bin/memo)
 
 If called without options, it converts the Markdown document directly to PDF. For documents that include glossary or nomenclature entries—both of which require multiple LaTeX passes—the `--tex` switch can be used to generate an intermediate `.tex` file. This can then be processed manually, optionally using the `--glossary` and `--nomenclature` switches if those features are needed.
 
+`memo --doctor` checks that every tool, template, filter, \LaTeX\ package and font the script relies on is installed, and hints at how to install what is missing. After each build, `memo` prints a short summary of anything worth a look: missing citations, glyphs the font lacks, and overfull lines. When a build fails, it prints the offending \LaTeX\ error and keeps the full log next to the source as `<file>_processing.log`.
+
 ## Frontmatter
 
 This is a sample frontmatter for this document:

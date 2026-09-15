@@ -22,6 +22,7 @@ OPEN_PDF=0      # enabled with --open
 YOINK_PDF=0     # enabled with --yoink  (macOS convenience)
 KEEP=0          # leave intermediates with --keep
 CLEAN_ONLY=0    # purge intermediates then exit with --clean
+DOCTOR=0        # check toolchain then exit with --doctor
 LOG_FILE=""
 PREPROCESSED_MD=""
 
@@ -41,6 +42,8 @@ Options:
 
   --keep          Keep all temporary / intermediate files (no cleanup at exit).
   --clean         Delete temporary / intermediate files and exit without building.
+  --doctor        Check that every required tool, template, filter, package and
+                  font is installed, then exit.
   --template PATH Path to the root pandoc template name (defaults to 'custom_eisvogel' for single, 'custom_magazine' for double).
 
   -DNAME=VALUE    m4 define passed through to preprocessing (repeatable).
@@ -72,25 +75,103 @@ parse_layout() {
   esac
 }
 
-# Generic helper: run command quietly or tee to log depending on $INFO
+# Generic helper: run a command with its output captured in $LOG_FILE, also
+# echoed to the terminal with --info. The log feeds log_errors/log_warnings
+# and is removed on a clean run unless --info or --keep.
 quiet_or_log() {   # quiet_or_log cmd arg …
-  if (( INFO )); then "$@" 2>&1 | tee -a "$LOG_FILE"; else "$@" >/dev/null 2>&1; fi
+  if (( INFO )); then "$@" 2>&1 | tee -a "$LOG_FILE"; else "$@" >>"$LOG_FILE" 2>&1; fi
 }
 
 # TeX compilation wrapper that ignores xelatex exit code but checks PDF output
 run_xelatex() {    # run_xelatex file.tex
   local tex=$1
-  # Run xelatex and ignore its exit status (but capture output)
-  if (( INFO )); then
-    xelatex -interaction=nonstopmode "$tex" 2>&1 | tee -a "$LOG_FILE" || true
-  else
-    xelatex -interaction=nonstopmode "$tex" >/dev/null 2>&1 || true
-  fi
+  quiet_or_log xelatex -interaction=nonstopmode "$tex" || true
   # Verify PDF was actually created
   [[ -f ${tex%.tex}.pdf ]] || { echo "XeLaTeX failed to produce PDF." ; exit 1; }
 }
 
+# Pull the lines that matter out of the pandoc/xelatex log. LaTeX reports
+# errors as "! …" followed by an "l.NNN" line pointing into the intermediate
+# .tex, pandoc prefixes its own with "pandoc:" or "Error producing PDF".
+log_errors() {
+  [[ -s $LOG_FILE ]] || return 0
+  # grep exits 1 on no match; under set -e/pipefail that would abort the summary
+  grep -E -A2 '^! ' "$LOG_FILE" | grep -v -- '^--$' | head -24 || true
+  grep -E '^pandoc: |^Error producing PDF|^\[ERROR\]|^\[WARNING\] Could not' "$LOG_FILE" | head -5 || true
+  [[ -s mermaid-filter.err ]] && { echo "mermaid-filter:"; head -10 mermaid-filter.err; }
+  return 0
+}
+
+# Warnings worth a glance after a successful build: pandoc's own (missing
+# citations, unknown filters), glyphs the font lacks, and overfull boxes.
+log_warnings() {
+  [[ -s $LOG_FILE ]] || return 0
+  # pandoc echoes LaTeX's "Missing character" as a [WARNING] too; report it once
+  grep -E '^\[WARNING\]' "$LOG_FILE" | grep -v 'Missing character' | sort -u | head -10 || true
+  grep -oE 'Missing character: There is no [^ ]+ \([^)]*\) in font [^:]+' "$LOG_FILE" | sort -u | head -5 || true
+  local n worst
+  n=$(grep -c 'Overfull \\hbox' "$LOG_FILE" || true)
+  if (( n )); then
+    worst=$(grep -oE 'Overfull \\hbox \([0-9.]+pt' "$LOG_FILE" | grep -oE '[0-9.]+pt' | sort -rn | head -1 || true)
+    echo "memo: $n overfull hbox(es), worst $worst too wide"
+  fi
+  return 0
+}
+
+# --doctor: report what the toolchain has and lacks, exit 1 if a required
+# piece is missing. Optional entries only matter for the flag or layout named.
+doctor() {
+  local rc=0 level label hint
+  check() {   # check req|opt LABEL HINT CMD…
+    level=$1 label=$2 hint=$3; shift 3
+    if "$@" >/dev/null 2>&1; then printf '  ok        %s\n' "$label"
+    elif [[ $level == req ]]; then printf '  MISSING   %s  → %s\n' "$label" "$hint"; rc=1
+    else printf '  optional  %s  → %s\n' "$label" "$hint"
+    fi
+  }
+  echo "memo doctor"
+  echo "  pandoc data dir: $PANDOC_DATA_DIR"
+  echo "Commands"
+  check req pandoc        'https://pandoc.org'                     command -v pandoc
+  check req xelatex       'install TeX Live'                       command -v xelatex
+  check req kpsewhich     'install TeX Live'                       command -v kpsewhich
+  check req m4            'install m4 (gm4 on macOS via brew)'     command -v m4
+  check req mermaid-filter 'npm i -g mermaid-filter'               command -v mermaid-filter
+  check opt makeglossaries '--glossary needs it (TeX Live)'        command -v makeglossaries
+  check opt makeindex     '--nomenclature needs it (TeX Live)'     command -v makeindex
+  check opt pandoc-latex-environment 'pipx install pandoc-latex-environment' command -v pandoc-latex-environment
+  check opt 'open / xdg-open' '--open needs one of them'           bash -c 'command -v open || command -v xdg-open'
+  echo "Templates ($PANDOC_TPL_DIR)"
+  check req custom_eisvogel.latex 'copy the Eisvogel template here' test -f "$PANDOC_TPL_DIR/custom_eisvogel.latex"
+  check opt custom_magazine.latex 'needed for the double layout'  test -f "$PANDOC_TPL_DIR/custom_magazine.latex"
+  check req ieee-with-url.csl 'citation-style-language/styles on GitHub' test -f "$PANDOC_TPL_DIR/ieee-with-url.csl"
+  echo "Filters ($PANDOC_DATA_DIR/filters)"
+  local f
+  for f in "$BASE_PATH"/filters/*.lua; do
+    f=$(basename "$f")
+    check opt "$f" "copy from $BASE_PATH/filters" test -f "$PANDOC_DATA_DIR/filters/$f"
+  done
+  echo "LaTeX packages"
+  local pkg
+  for pkg in scrartcl.cls fontspec.sty booktabs.sty caption.sty enumitem.sty \
+             mdframed.sty multicol.sty glossaries.sty nomencl.sty; do
+    check req "$pkg" 'tlmgr install <package>' kpsewhich "$pkg"
+  done
+  echo "Fonts"
+  check opt 'TeX Gyre Pagella' 'double layout body font (tlmgr install tex-gyre)' kpsewhich texgyrepagella-regular.otf
+  return $rc
+}
+
 cleanup() {
+  local rc=$?
+  # A failed run leaves the log behind and summarizes it; a clean run
+  # removes it unless --info or --keep asked for it.
+  if (( rc )) && [[ -s ${LOG_FILE:-} ]]; then
+    log_errors
+    echo "memo: build failed, full log in $LOG_FILE" >&2
+  elif ! (( INFO || KEEP )); then
+    rm -f "${LOG_FILE:-}"
+  fi
   if (( KEEP )); then
     (( INFO )) && echo "Keeping intermediates (--keep), skipping cleanup." \
               | tee -a "$LOG_FILE"
@@ -121,13 +202,7 @@ cleanup() {
 trap cleanup EXIT
 
 error_handler() {
-  local line=$1
-  if (( INFO )); then
-    echo "Error at line $line" | tee -a "$LOG_FILE"
-    tail -n10 "$LOG_FILE"
-  else
-    echo "Error at line $line" >&2
-  fi
+  (( INFO )) && echo "memo: error at script line $1" >&2
   exit 1
 }
 trap 'error_handler $LINENO' ERR
@@ -149,6 +224,7 @@ while (( $# > 0 )); do
     --yoink)        YOINK_PDF=1       ; shift ;;
     --keep)         KEEP=1            ; shift ;;
     --clean)        CLEAN_ONLY=1      ; shift ;;
+    --doctor)       DOCTOR=1          ; shift ;;
     --template)
       [[ $# -ge 2 ]] || { echo "--template requires a value." ; exit 1; }
       TEMPLATE_NAME="$2"
@@ -159,6 +235,13 @@ while (( $# > 0 )); do
     *)  break ;;
   esac
 done
+
+BASE_PATH=$(dirname "$(readlink -f "$0")")/..
+DEFAULT_DATA_DIR=$(pandoc --version  | sed -E -n 's/^User data directory:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p')
+PANDOC_DATA_DIR="${PANDOC_DATA_DIR:-$DEFAULT_DATA_DIR}"
+PANDOC_TPL_DIR="$PANDOC_DATA_DIR/templates"
+
+if (( DOCTOR )); then doctor; exit $?; fi
 
 MD=${1:-}; [[ -z $MD ]] && usage ; shift || true
 if [[ ! -f $MD ]]; then
@@ -183,9 +266,7 @@ PDF="${BASENAME}.pdf"
 BIB="${BASENAME}.bib"
 PREPROCESSED_MD="${BASENAME}_preprocessed.md"
 LOG_FILE="${BASENAME}_processing.log"
-(( INFO )) && : >"$LOG_FILE"
-
-BASE_PATH=$(dirname "$(readlink -f "$0")")/..
+: >"$LOG_FILE"
 
 export TEXINPUTS="$BASE_PATH:"
 
@@ -239,10 +320,6 @@ BIB_OPT="" ; [[ -f $BIB ]] && BIB_OPT="--bibliography=$BIB --citeproc"
 # 8 – Pandoc base args
 ###############################################################################
 
-DEFAULT_DATA_DIR=$(pandoc --version  | sed -E -n 's/^User data directory:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p')
-PANDOC_DATA_DIR="${PANDOC_DATA_DIR:-$DEFAULT_DATA_DIR}"
-PANDOC_TPL_DIR="$PANDOC_DATA_DIR/templates"
-
 # Apply every Lua filter installed under the pandoc data dir, in name order
 # (prefix with a number to control sequencing). No directory, no filters —
 # existing installs behave exactly as before. This repo ships
@@ -273,6 +350,7 @@ fi
 
 pandoc_common=(
   --data-dir="$PANDOC_DATA_DIR"
+  --verbose
   --pdf-engine=xelatex
   --from markdown
   --variable papersize=a4
@@ -311,6 +389,7 @@ fi
 # 10 – Finish
 ###############################################################################
 [[ -f $PDF ]] || { echo "PDF generation failed." ; exit 1; }
+log_warnings
 
 if (( INFO )); then
   {
