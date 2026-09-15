@@ -37,6 +37,15 @@ not books or slides. It uses an inline title instead of a separate cover;
 tables span both columns using the installed `twocolumn-tables.lua` filter,
 with its existing caption and multipage limitations.
 
+### Mixing one- and two-column pages
+
+Put `\onecolumn` or `\twocolumn` on a line of its own to switch layout for
+the pages that follow; each switch starts a new page. Typical use: a two-column
+introduction, then `\onecolumn` before reference sections with wide code
+blocks and tables, and `\twocolumn` to return. Tables in one-column regions
+render inline as usual; only tables in two-column regions are turned into
+spanning floats.
+
 To use the previous double-column style:
 
 ```sh

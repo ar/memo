@@ -35,7 +35,19 @@ end
 function Pandoc(doc)
   if not doc.meta.twocolumn then return nil end
   local found = false
-  doc = doc:walk({ Table = function(t) found = true; return to_tabular(t) end })
+  -- Documents may switch layout mid-stream with raw \onecolumn /
+  -- \twocolumn lines; longtable works fine in one-column regions, so
+  -- only rewrite tables while two-column mode is in effect.
+  local two = true
+  local filter = { Table = function(t) found = true; return to_tabular(t) end }
+  for i, b in ipairs(doc.blocks) do
+    if b.t == 'RawBlock' and b.format:match('^%a*tex$') then
+      if b.text:match('^%s*\\onecolumn') then two = false
+      elseif b.text:match('^%s*\\twocolumn') then two = true end
+    elseif two then
+      doc.blocks[i] = b:walk(filter)
+    end
+  end
   -- The raw blocks hide the tables from the writer, which would drop the
   -- table preamble (booktabs, array, calc); force it back on.
   if found then doc.meta.tables = true end
