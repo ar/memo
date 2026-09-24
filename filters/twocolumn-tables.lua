@@ -45,7 +45,14 @@ function Pandoc(doc)
       if b.text:match('^%s*\\onecolumn') then two = false
       elseif b.text:match('^%s*\\twocolumn') then two = true end
     elseif two then
-      doc.blocks[i] = b:walk(filter)
+      -- Block:walk applies the filter to the subtree, never to the block
+      -- itself, so a top-level table must be handled here.
+      if b.t == 'Table' then
+        found = true
+        doc.blocks[i] = to_tabular(b)
+      else
+        doc.blocks[i] = b:walk(filter)
+      end
     end
   end
   -- The raw blocks hide the tables from the writer, which would drop the
