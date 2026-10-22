@@ -175,7 +175,7 @@ cleanup() {
   if (( KEEP )); then
     (( INFO )) && echo "Keeping intermediates (--keep), skipping cleanup." \
               | tee -a "$LOG_FILE"
-    return
+    return "$rc"
   fi
 
   # A failure before the file paths are resolved (usage error, missing
