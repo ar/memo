@@ -13,6 +13,7 @@
 local MIN_WIDTH = 0.06   -- floor so tiny columns (e.g. "Bit") stay readable
 local CHARS_PER_LINE = 80 -- conservative body-width capacity in characters
 local MAX_FLOOR = 0.35   -- one pathological unbreakable cell can't eat the page
+local CODE_FACTOR = 1.0  -- monospace width relative to the body face; the +2 padding covers the rest
 
 local function len(text)
   -- Count UTF-8 codepoints, not bytes, so accented text doesn't skew widths.
@@ -30,9 +31,19 @@ local function rows_max(rows, max, word)
       local text = cell_text(cell)
       local n = len(text)
       if n > (max[i] or 0) then max[i] = n end
+      -- A code span is set in a wider monospace face and never wraps, so
+      -- it counts as one word at roughly 1.3 proportional characters each.
+      local code = 0
+      pandoc.Div(cell.contents):walk({ Code = function(c)
+        local cn = math.ceil(len(c.text) * CODE_FACTOR)
+        if cn > code then code = cn end
+      end })
+      if code > (word[i] or 0) then word[i] = code end
+      if code > max[i] then max[i] = code end
       -- Longest unbreakable run: a p-column wraps at spaces and after
       -- hyphens, but never inside a word or a number like 400,000.
-      for w in text:gmatch('[^%s%-]+') do
+      -- U+00A0 is a deliberate non-break; Lua's %s may match it, so hide it.
+      for w in (text:gsub('\194\160', '_')):gmatch('[^%s%-]+') do
         local wn = len(w)
         if wn > (word[i] or 0) then word[i] = wn end
       end
