@@ -47,6 +47,9 @@ Options:
   --template PATH Path to the root pandoc template name (defaults to 'custom_eisvogel' for single, 'custom_magazine' for double).
 
   -DNAME=VALUE    m4 define passed through to preprocessing (repeatable).
+
+Optional dependency: Graphviz (dot) is required only for dot fenced diagrams.
+Install filters/graphviz.lua in the Pandoc data directory's filters/ folder.
 EOF
   exit 1
 }
@@ -137,6 +140,7 @@ doctor() {
   check req kpsewhich     'install TeX Live'                       command -v kpsewhich
   check req m4            'install m4 (gm4 on macOS via brew)'     command -v m4
   check req mermaid-filter 'npm i -g mermaid-filter'               command -v mermaid-filter
+  check opt 'Graphviz (dot; optional, for dot fences)' 'brew install graphviz / apt install graphviz' command -v dot
   check opt makeglossaries '--glossary needs it (TeX Live)'        command -v makeglossaries
   check opt makeindex     '--nomenclature needs it (TeX Live)'     command -v makeindex
   check opt pandoc-latex-environment 'pipx install pandoc-latex-environment' command -v pandoc-latex-environment
@@ -196,7 +200,7 @@ cleanup() {
           "${BASENAME}.ind" "${BASENAME}.nls" "${BASENAME}.glsdefs" \
           "${BASENAME}.toc"
   fi
-  rm -fr mermaid-img mermaid-filter.err
+  rm -fr mermaid-img mermaid-filter.err dot-img
 }
 
 trap cleanup EXIT

@@ -43,6 +43,43 @@ Mermaid is a versatile tool for creating diagrams and charts from simple text de
 
 `npm i -g mermaid-filter`
 
+### Graphviz (optional)
+
+Install Graphviz (`brew install graphviz` on macOS, or `apt install graphviz`
+on Debian/Ubuntu) and copy the filter into the Pandoc user data directory:
+
+```sh
+mkdir -p ~/.local/share/pandoc/filters
+cp filters/graphviz.lua filters/legacy-figures.lua ~/.local/share/pandoc/filters/
+```
+
+Use a `dot` fenced code block for a vector diagram. Add fence attributes for
+a numbered caption and image dimensions:
+
+```{.dot #fig-architecture caption="Proposed logical architecture" width=95%}
+digraph architecture {
+  rankdir=LR;
+  Client -> Gateway -> Service;
+}
+```
+
+`caption` supplies the numbered “Figure N” caption, `width` and optional
+`height` use Pandoc image dimensions (such as `95%` or `10cm`), and an optional
+`#identifier` supplies the figure's link target. A plain `dot` fence also
+works, without a caption. Captions are plain text.
+
+The filter runs `dot -Tpdf` for LaTeX/PDF output, preserving vector text and
+lines. Other output formats leave the code block unchanged. Generated PDFs
+live in `dot-img/` beside the output document; memo removes that directory
+on success or failure. `--keep` retains it, and `--clean` removes it. No
+additional `.gitignore` entry is needed when `*.pdf` is already ignored.
+
+`memo --doctor` reports Graphviz as optional. Only a document containing a
+`dot` fence needs `dot`; a missing executable or invalid diagram fails the
+build with a diagnostic. Mermaid fences continue to use `mermaid-filter`.
+The companion `legacy-figures.lua` filter preserves numbered captions from
+older external filters such as `mermaid-filter` when using Pandoc 3.
+
 ### M4
 
 The `m4` macro processor, designed by Brian Kernighan and Dennis Ritchie and originally developed as part of the Unix operating system in the 1970s, is not technically required in this toolchain but is a perfect fit for splitting large documents into smaller pieces, reusing content snippets, and providing standard constants such as the Git revision of the document, date, time, filename, and more. Key features of `m4` include its ability to define macros, perform arithmetic operations, manipulate text with ease, and call the operating system[^3]. It also supports file inclusion, conditional statements, and looping constructs.
